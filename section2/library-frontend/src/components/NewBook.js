@@ -3,6 +3,7 @@ import gql from 'graphql-tag';
 import { useMutation } from '@apollo/react-hooks';
 import { GET_BOOKS } from './Books'
 import { GET_AUTHORS } from './Authors'
+import EditAuthor from './EditAuthorYear'
 
 
 const NewBook = (props) => {
@@ -16,7 +17,7 @@ const NewBook = (props) => {
   mutation addBook($title: String!, $author: String!, $published: Int, $genres: [String]) {
     addBook(title: $title, author: $author, published: $published, genres: $genres)  {
         title
-        author,
+        author
         published
         genres
       }
@@ -26,8 +27,11 @@ const NewBook = (props) => {
   const [addBook] = useMutation(
       ADD_BOOK,
       {
-          refetchQueries: [{ query: GET_BOOKS }, {query: GET_AUTHORS}]
-        }
+        refetchQueries: [
+          { query: GET_BOOKS }, 
+          {query: GET_AUTHORS}
+        ]
+      }
     )
 
   if (!props.show) {
@@ -89,6 +93,7 @@ const NewBook = (props) => {
         </div>
         <button type='submit'>create book</button>
       </form>
+      <EditAuthor />
     </div>
   )
 }
