@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useQuery } from '@apollo/react-hooks';
 import Authors from './components/Authors'
 import Books from './components/Books'
 import NewBook from './components/NewBook'
