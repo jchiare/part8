@@ -1,103 +1,41 @@
-const { ApolloServer, gql } = require('apollo-server')
-const uuid = require('uuid/v1')
+require('dotenv').config()
+const { ApolloServer, gql, UserInputError } = require('apollo-server')
+const mongoose = require('mongoose')
 
+const Book = require('./models/Book')
+const Author = require('./models/Author')
+const DB_url = process.env.MONGODB_URI
 
-let authors = [
-  {
-    name: 'Robert Martin',
-    id: "afa51ab0-344d-11e9-a414-719c6709cf3e",
-    born: 1952,
-  },
-  {
-    name: 'Martin Fowler',
-    id: "afa5b6f0-344d-11e9-a414-719c6709cf3e",
-    born: 1963
-  },
-  {
-    name: 'Fyodor Dostoevsky',
-    id: "afa5b6f1-344d-11e9-a414-719c6709cf3e",
-    born: 1821
-  },
-  { 
-    name: 'Joshua Kerievsky', // birthyear not known
-    id: "afa5b6f2-344d-11e9-a414-719c6709cf3e",
-  },
-  { 
-    name: 'Sandi Metz', // birthyear not known
-    id: "afa5b6f3-344d-11e9-a414-719c6709cf3e",
-  },
-]
+mongoose.set('useFindAndModify', false)
 
-/*
- * It would be more sensible to assosiate book and the author by saving 
- * the author id instead of the name to the book.
- * For simplicity we however save the author name.
-*/
+console.log('connecting to', DB_url)
 
-let books = [
-  {
-    title: 'Clean Code',
-    published: 2008,
-    author: 'Robert Martin',
-    id: "afa5b6f4-344d-11e9-a414-719c6709cf3e",
-    genres: ['refactoring']
-  },
-  {
-    title: 'Agile software development',
-    published: 2002,
-    author: 'Robert Martin',
-    id: "afa5b6f5-344d-11e9-a414-719c6709cf3e",
-    genres: ['agile', 'patterns', 'design']
-  },
-  {
-    title: 'Refactoring, edition 2',
-    published: 2018,
-    author: 'Martin Fowler',
-    id: "afa5de00-344d-11e9-a414-719c6709cf3e",
-    genres: ['refactoring']
-  },
-  {
-    title: 'Refactoring to patterns',
-    published: 2008,
-    author: 'Joshua Kerievsky',
-    id: "afa5de01-344d-11e9-a414-719c6709cf3e",
-    genres: ['refactoring', 'patterns']
-  },  
-  {
-    title: 'Practical Object-Oriented Design, An Agile Primer Using Ruby',
-    published: 2012,
-    author: 'Sandi Metz',
-    id: "afa5de02-344d-11e9-a414-719c6709cf3e",
-    genres: ['refactoring', 'design']
-  },
-  {
-    title: 'Crime and punishment',
-    published: 1866,
-    author: 'Fyodor Dostoevsky',
-    id: "afa5de03-344d-11e9-a414-719c6709cf3e",
-    genres: ['classic', 'crime']
-  },
-  {
-    title: 'The Demon',
-    published: 1872,
-    author: 'Fyodor Dostoevsky',
-    id: "afa5de04-344d-11e9-a414-719c6709cf3e",
-    genres: ['classic', 'revolution']
-  },
-]
+mongoose.connect(DB_url, { useNewUrlParser: true })
+  .then(() => {
+    console.log('connected to MongoDB')
+  })
+  .catch((error) => {
+    console.log('error connection to MongoDB:', error.message)
+  })
 
 const typeDefs = gql`
   type Books {
-    title: String,
-    author: String,
-    published: Int,
-    genres: [String]
+    title: String!,
+    author: Author!,
+    published: Int!,
+    genres: [String!]!,
+    id: ID!
   }
 
   type Author {
-    name: String,
+    name: String!,
     born: Int,
     bookCount: Int
+  }
+
+  input AuthorInput {
+    name: String!,
+    born: Int
   }
 
   type EditedAuthor {
@@ -115,56 +53,73 @@ const typeDefs = gql`
   type Mutation {
     addBook(
       title: String,
-      author: String,
+      author: AuthorInput!,
       published: Int,
       genres: [String]
     ): Books,
+
     editAuthor(
       name: String,
       setBornTo: Int
-    ): EditedAuthor
+    ): EditedAuthor,
+
+    addAuthor(
+      name:String!,
+      born:Int
+    ): Author
   }
+
 `
 
 const resolvers = {
   Query: {
-    bookCount: () => books.length,
-    authorCount: () => authors.length,
-    allBooks: (root,args) => {
-      if(!args.author && !args.genres) return books
-      else if (args.author) return books.filter(book => book.author === args.author)
-      else if (args.genres) return books.filter(book => book.genres.findIndex(i => i !== args.genres))
-      return books.filter(book => book.author === args.author)
-    },
-    allAuthors: () => authors.filter(author => author.name)
+    bookCount: () => Book.collection.countDocuments(),
+    authorCount: () =>  Author.collection.countDocuments(),
+    allBooks: async () => await Book.find({}),
+    allAuthors: async () => await Author.find({})
   },
   Author: {
-    bookCount:(root) => books.filter(book => book.author === root.name).length,
-    born:(root) => root.born
+    bookCount: async ({ name }) => {
+      const author = await Author.findOne({name})
+      const bookCount = await Book.find({author}).count()
+      return bookCount
+    }
   },
   Mutation: {
-    addBook: (root,args) => {
-      books = books.concat({ ...args})
-      if(authors.filter(author => author.name === args.author).length === 0){
-        authors = authors.concat({ 
-          name : args.author,
-          id : uuid(),
-          born : args.born
+    addAuthor: (root,args) => {
+      const author = new Author({ ...args})
+      return author.save()
+    },
+    addBook: async (root,args) => {
+      const authorName = args.author.name || "No Name"
+      const doesAuthorExist = await Author.findOne({name: authorName})
+      const author = doesAuthorExist || await Author.findOne({name: "No Name"})
+      const book = new Book({ ... args, author})
+      try {
+        await book.save()
+      } catch(error) {
+        throw new UserInputError(error.message, {
+          invalidArgs: args,
         })
       }
-      return { title, author } = args
+      return book
     },
-    editAuthor: (root,args) => {
-      const authorToChange = authors.find(({name}) => name === args.name)
+    editAuthor: async (root,{name, setBornTo}) => {
+      if(name.length < 4) throw new UserInputError(`'${name}' must be at least 4 characters for 'name' arg`, { invalidArgs:name})
+      const authorToChange = await Author.findOne({name})
       if(!authorToChange) return null
-      const changedAuthor = {
-        ...authorToChange,
-        born: args.setBornTo
+      authorToChange.born = setBornTo
+
+      try {
+        await authorToChange.save()
+      } catch (error) {
+        throw new UserInputError(error.message, {
+          invalidArgs: args,
+        })
       }
-      authors = authors.map(author => author.id !== changedAuthor.id ? author : changedAuthor)
       return { 
-        name: args.name, 
-        born: args.setBornTo 
+        name, 
+        born: setBornTo 
       } 
     }
   }

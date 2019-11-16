@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@apollo/react-hooks';
 import { GET_AUTHORS } from './Authors'
 
 
-const EditAuthor = (props) => {
+const EditAuthor = () => {
   const [author, setAuthor] = useState('')
   const [year, setYear] = useState('')
 

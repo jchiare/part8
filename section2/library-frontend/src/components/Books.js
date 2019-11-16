@@ -5,8 +5,7 @@ import { useQuery } from '@apollo/react-hooks';
 export const GET_BOOKS = gql`
 {
   allBooks  {
-    title,
-    author,
+    title
     published
   }
 }
