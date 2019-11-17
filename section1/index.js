@@ -61,7 +61,7 @@ const typeDefs = gql`
   type Query {
     bookCount: Int,
     authorCount: Int,
-    allBooks(author: String, genres: String): [Books],
+    allBooks(author: String, genre: String): [Books],
     allAuthors: [Author],
     me: User
   }
@@ -69,8 +69,8 @@ const typeDefs = gql`
   type Mutation {
     addBook(
       title: String,
-      author: AuthorInput!,
-      published: Int,
+      author: String!,
+      published: Int!,
       genres: [String]
     ): Books
 
@@ -101,9 +101,13 @@ const resolvers = {
   Query: {
     bookCount: () => Book.collection.countDocuments(),
     authorCount: () =>  Author.collection.countDocuments(),
-    allBooks: async () => await Book.find({}).populate('author'),
+    allBooks: async (_, { genre}) => {
+      return genre
+        ? await Book.find({'genres': { $in: genre }}).populate('author')
+        : await Book.find({}).populate('author')}
+    ,
     allAuthors: async () => await Author.find({}),
-    me: (_, __, context) => context.currentUser
+    me: (_, __, {currentUser}) => currentUser
   },
   Author: {
     bookCount: async ({ name }) => {
@@ -150,9 +154,8 @@ const resolvers = {
       return author
     },
     addBook: async (  _,  args, { currentUser } ) => {
-      if (!currentUser) {
-        throw new AuthenticationError("not authenticated")
-      }
+      if (!currentUser) throw new AuthenticationError("not authenticated")
+
       const authorName = args.author.name || "No Name"
       const doesAuthorExist = await Author.findOne({name: authorName})
       const author = doesAuthorExist || await Author.findOne({name: "No Name"})
@@ -167,9 +170,8 @@ const resolvers = {
       return book
     },
     editAuthor: async (_,{name, setBornTo}, {currentUser}) => {
-      if (!currentUser) {
-        throw new AuthenticationError("not authenticated")
-      }
+      if (!currentUser) throw new AuthenticationError("not authenticated")
+      
       if(name.length < 4) throw new UserInputError(`'${name}' must be at least 4 characters for 'name' arg`, { invalidArgs:name})
       const authorToChange = await Author.findOne({name})
       if(!authorToChange) return null

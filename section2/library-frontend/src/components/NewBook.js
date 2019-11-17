@@ -3,21 +3,33 @@ import gql from 'graphql-tag';
 import { useMutation } from '@apollo/react-hooks';
 import { GET_BOOKS } from './Books'
 import { GET_AUTHORS } from './Authors'
+import { GET_RECOMMENDED_BOOKS, GET_USER } from './Recommendation'
 import EditAuthor from './EditAuthorYear'
 
 
 const NewBook = (props) => {
+  const [errorMessage, setErrorMessage] = useState(null)
+  const handleError = error => {
+    alert(error)
+    setErrorMessage(error.graphQLErrors[0].message)
+    setTimeout(() => {
+      setErrorMessage(null)
+    }, 10000)
+  }
+
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
-  const [published, setPublished] = useState(false)
+  const [published, setPublished] = useState('')
   const [genre, setGenre] = useState('')
   const [genres, setGenres] = useState([])
 
   const ADD_BOOK = gql`
-  mutation addBook($title: String!, $author: String!, $published: Int, $genres: [String]) {
+  mutation addBook($title: String!, $author: String!, $published: Int!, $genres: [String]) {
     addBook(title: $title, author: $author, published: $published, genres: $genres)  {
         title
-        author
+        author {
+          name
+        }
         published
         genres
       }
@@ -28,9 +40,34 @@ const NewBook = (props) => {
       ADD_BOOK,
       {
         refetchQueries: [
-          { query: GET_BOOKS }, 
-          {query: GET_AUTHORS}
-        ]
+          { query: GET_AUTHORS }
+        ],
+        onError: handleError,
+        update:(cache, { data: {addBook} }) => {
+
+          // Add book to main book cache
+          const cachedBooks = cache.readQuery({ query: GET_BOOKS })
+          cachedBooks.allBooks.push(addBook)
+          cache.writeQuery({
+            query: GET_BOOKS,
+            data: cachedBooks
+          })
+
+          // Check if new book should be added to recommended cache
+          const user = cache.readQuery({ query: GET_USER })
+          if(addBook.genres.includes(user.me.favoriteGenre)){
+            const cachedRecommendedBooks = cache.readQuery({
+               query: GET_RECOMMENDED_BOOKS ,
+               variables: {genre: user.me.favoriteGenre }
+            })
+            cachedRecommendedBooks.allBooks.push(addBook)
+            cache.writeQuery({
+              query: GET_RECOMMENDED_BOOKS,
+              data: cachedRecommendedBooks
+            })
+          }
+
+        }
       }
     )
 
@@ -58,6 +95,11 @@ const NewBook = (props) => {
 
   return (
     <div>
+      {errorMessage &&
+        <div style={{color: 'red'}}>
+          {errorMessage}
+        </div>
+      }
       <form onSubmit={submit}>
         <div>
           title
