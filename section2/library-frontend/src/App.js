@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import gql from 'graphql-tag';
-import { useMutation, useApolloClient } from '@apollo/react-hooks';
+import { useMutation, useApolloClient, useSubscription } from '@apollo/react-hooks';
 
 import Authors from './components/Authors'
 import Books from './components/Books'
-import NewBook from './components/NewBook'
+import NewBook, { UpdateBookCache } from './components/NewBook'
 import LoginForm from './components/LoginForm'
 import Recommendation from './components/Recommendation'
 
@@ -14,6 +14,26 @@ const LOGIN = gql`
       value
     }
   }
+`
+
+export const BOOK_DETAILS = gql`
+fragment BookDetails on Books {
+  title
+  author {
+    name
+  }
+  published
+  genres
+}
+`
+
+const BOOK_ADDED = gql`
+subscription {
+  bookAdded {
+    ...BookDetails
+  }
+}
+${BOOK_DETAILS}
 `
 
 const App = () => {
@@ -30,7 +50,7 @@ const App = () => {
 
   const [login] = useMutation(LOGIN,
     { onError: handleError }
-    )
+  )
 
   const client = useApolloClient()
 
@@ -44,6 +64,15 @@ const App = () => {
   useEffect(() => {
     if(token) setPage('add')
   },[token])
+
+  
+  useSubscription(BOOK_ADDED, {
+    onSubscriptionData: ({ subscriptionData }) => {
+      const { bookAdded } = subscriptionData.data
+      window.alert(`Added ${JSON.stringify(bookAdded)}`)
+      UpdateBookCache(client,bookAdded)
+    }
+  })
 
   return (
     <div>

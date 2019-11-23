@@ -6,6 +6,45 @@ import { GET_AUTHORS } from './Authors'
 import { GET_RECOMMENDED_BOOKS, GET_USER } from './Recommendation'
 import EditAuthor from './EditAuthorYear'
 
+import { BOOK_DETAILS } from '../App'
+
+
+export const UpdateBookCache = (cache, addBook) => {
+  const includedIn = (set, object) => set.map(p => p.title).includes(object.title)
+
+  // Add book to main book cache
+  const cachedBooks = cache.readQuery({ query: GET_BOOKS })
+  if(!includedIn(cachedBooks.allBooks,addBook)){
+
+    cachedBooks.allBooks.push(addBook)
+    cache.writeQuery({
+      query: GET_BOOKS,
+      data: cachedBooks
+    })
+    
+  }
+
+  // Check if new book should be added to recommended cache
+  const user = cache.readQuery({ query: GET_USER })
+  if(addBook.genres.includes(user.me.favoriteGenre)){
+
+    const cachedRecommendedBooks = cache.readQuery({
+       query: GET_RECOMMENDED_BOOKS ,
+       variables: {genre: user.me.favoriteGenre }
+    })
+
+    if(!includedIn(cachedRecommendedBooks.allBooks,addBook)){
+
+      cachedRecommendedBooks.allBooks.push(addBook)
+      cache.writeQuery({
+        query: GET_RECOMMENDED_BOOKS,
+        data: cachedRecommendedBooks
+      })
+    }
+  }
+
+}
+
 
 const NewBook = (props) => {
   const [errorMessage, setErrorMessage] = useState(null)
@@ -26,14 +65,10 @@ const NewBook = (props) => {
   const ADD_BOOK = gql`
   mutation addBook($title: String!, $author: String!, $published: Int!, $genres: [String]) {
     addBook(title: $title, author: $author, published: $published, genres: $genres)  {
-        title
-        author {
-          name
-        }
-        published
-        genres
+        ...BookDetails
       }
     }
+    ${BOOK_DETAILS}
   `
 
   const [addBook] = useMutation(
@@ -43,31 +78,7 @@ const NewBook = (props) => {
           { query: GET_AUTHORS }
         ],
         onError: handleError,
-        update:(cache, { data: {addBook} }) => {
-
-          // Add book to main book cache
-          const cachedBooks = cache.readQuery({ query: GET_BOOKS })
-          cachedBooks.allBooks.push(addBook)
-          cache.writeQuery({
-            query: GET_BOOKS,
-            data: cachedBooks
-          })
-
-          // Check if new book should be added to recommended cache
-          const user = cache.readQuery({ query: GET_USER })
-          if(addBook.genres.includes(user.me.favoriteGenre)){
-            const cachedRecommendedBooks = cache.readQuery({
-               query: GET_RECOMMENDED_BOOKS ,
-               variables: {genre: user.me.favoriteGenre }
-            })
-            cachedRecommendedBooks.allBooks.push(addBook)
-            cache.writeQuery({
-              query: GET_RECOMMENDED_BOOKS,
-              data: cachedRecommendedBooks
-            })
-          }
-
-        }
+        update:(cache, { data: {addBook} }) => UpdateBookCache(cache,addBook)
       }
     )
 
